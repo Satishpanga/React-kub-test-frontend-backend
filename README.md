@@ -9,6 +9,7 @@ A full-stack application with React frontend and Node.js Express backend, deploy
 - [Environment Setup](#environment-setup)
 - [Local Development](#local-development)
 - [Docker Setup](#docker-setup)
+- - [Local Development with Kubernetes](#local-development-with-kubernetes-without-docker-hub)
 - [Kubernetes Deployment with Helm](#kubernetes-deployment-with-helm)
 - [Configuration](#configuration)
 - [Usage](#usage)
@@ -116,6 +117,172 @@ docker build -t your-dockerhub-username/frontend:latest .
 docker push your-dockerhub-username/backend:latest
 docker push your-dockerhub-username/frontend:latest
 ```
+
+## 📦 Local Development with Kubernetes (Without Docker Hub)
+
+### Option 1: Using Minikube's Docker Daemon (Recommended)
+
+When using Minikube, you can build images directly into Minikube's Docker daemon, avoiding the need to push to Docker Hub.
+
+```bash
+# Point your terminal to use Minikube's Docker daemon
+eval $(minikube docker-env)
+
+# Now build your images - they'll be available in Minikube
+cd Backend
+docker build -t backend:latest .
+
+cd ../Frontend  
+docker build -t frontend:latest .
+
+# Verify images are in Minikube
+docker images
+```
+
+**Update your `helm-chart/values.yaml`:**
+
+```yaml
+backend:
+  image:
+    repository: backend  # No username needed
+    tag: latest
+    pullPolicy: Never    # Important! Never pull from registry
+
+frontend:
+  image:
+    repository: frontend  # No username needed
+    tag: latest
+    pullPolicy: Never     # Important! Never pull from registry
+```
+
+### Option 2: Load Images into Kind
+
+If using Kind (Kubernetes in Docker):
+
+```bash
+# Build images normally
+cd Backend
+docker build -t backend:latest .
+
+cd ../Frontend
+docker build -t frontend:latest .
+
+# Load images into Kind cluster
+kind load docker-image backend:latest
+kind load docker-image frontend:latest
+```
+
+### Option 3: Using Local Docker Registry
+
+Set up a local registry for better image management:
+
+```bash
+# Start local registry
+docker run -d -p 5000:5000 --name registry registry:2
+
+# Tag and push images to local registry
+docker tag backend:latest localhost:5000/backend:latest
+docker tag frontend:latest localhost:5000/frontend:latest
+
+docker push localhost:5000/backend:latest
+docker push localhost:5000/frontend:latest
+```
+
+**Update `values.yaml`:**
+
+```yaml
+backend:
+  image:
+    repository: localhost:5000/backend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+frontend:
+  image:
+    repository: localhost:5000/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+```
+
+### Using NodePort Service Type
+
+For local development, NodePort is more practical than LoadBalancer.
+
+**Update `helm-chart/values.yaml` to use NodePort:**
+
+```yaml
+backend:
+  service:
+    name: backend-service
+    type: ClusterIP        # Keep backend as ClusterIP
+    port: 5000
+    targetPort: 5000
+
+frontend:
+  service:
+    name: frontend-service
+    type: NodePort         # Change to NodePort for local access
+    port: 80
+    targetPort: 3000
+    nodePort: 30080        # Optional: specify port (30000-32767)
+```
+
+**Access your application:**
+
+```bash
+# For Minikube
+minikube service frontend-service --url
+# Or
+minikube service frontend-service  # Opens in browser automatically
+
+# For Kind - Use kubectl port-forward
+kubectl port-forward service/frontend-service 8080:80
+# Then access at http://localhost:8080
+
+# Get NodePort value
+kubectl get service frontend-service
+```
+
+### Complete Local Development Workflow
+
+```bash
+# 1. Point to Minikube's Docker (if using Minikube)
+eval $(minikube docker-env)
+
+# 2. Build images
+cd Backend && docker build -t backend:latest . && cd ..
+cd Frontend && docker build -t frontend:latest . && cd ..
+
+# 3. Update values.yaml (set pullPolicy: Never and remove dockerhub username)
+
+# 4. Install/Upgrade Helm chart
+helm upgrade --install my-app ./helm-chart
+
+# 5. Access application
+minikube service frontend-service
+
+# 6. Check logs if needed
+kubectl logs -f deployment/backend
+kubectl logs -f deployment/frontend
+```
+
+### Environment Variable Configuration for Local Setup
+
+**Frontend `.env` for Kubernetes:**
+
+```env
+# The backend service name in Kubernetes
+VITE_API_BASE=http://backend-service:5000
+```
+
+**Important Notes:**
+
+1. **ImagePullPolicy:** Set to `Never` when using Minikube's daemon
+2. **Service Communication:** Frontend communicates with backend using service name `backend-service:5000`
+3. **Rebuild:** After code changes, rebuild images and upgrade Helm chart
+4. **Reset Docker Env:** Run `eval $(minikube docker-env -u)` to return to host Docker
+
+
 
 ## ☸️ Kubernetes Deployment with Helm
 
