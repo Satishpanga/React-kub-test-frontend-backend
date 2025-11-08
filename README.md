@@ -1,313 +1,330 @@
 # React + Node.js Kubernetes Deployment
 
-A full-stack application with React frontend and Node.js Express backend, deployed using Helm charts on Kubernetes.
+A full-stack application with React frontend and Node.js Express backend, demonstrating multiple deployment methods using both Kubernetes manifests and Helm charts.
 
 ## 📋 Table of Contents
 
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Environment Setup](#environment-setup)
-- [Local Development](#local-development)
-- [Docker Setup](#docker-setup)
-- - [Local Development with Kubernetes](#local-development-with-kubernetes-without-docker-hub)
-  - - [GitHub Codespaces Deployment](#github-codespaces-deployment)
-- [Kubernetes Deployment with Helm](#kubernetes-deployment-with-helm)
-- [Configuration](#configuration)
-- [Usage](#usage)
+- [Deployment Methods](#deployment-methods)
+  - [🏠 Method 1: Minikube Local Deployment](#-method-1-minikube-local-deployment)
+  - [💻 Method 2: GitHub Codespaces Deployment](#-method-2-github-codespaces-deployment)
+  - [🖥️ Method 3: Production Server with NodePort](#%EF%B8%8F-method-3-production-server-with-nodeport)
+- [🔐 Secrets Management](#-secrets-management)
+- [Troubleshooting](#troubleshooting)
+- [API Endpoints](#api-endpoints)
 
 ## 📁 Project Structure
 
 ```
 React-kub-test-frontend-backend/
 ├── Backend/
-│   ├── server.js          # Express server
-│   ├── .env              # Backend environment variables
+│   ├── server.js
+│   ├── .env
+│   ├── Dockerfile
+│   ├── .dockerignore
 │   └── package.json
 ├── Frontend/
 │   ├── src/
-│   │   └── App.jsx       # React login component
-│   ├── .env              # Frontend environment variables
+│   │   └── App.jsx
+│   ├── .env
+│   ├── Dockerfile
+│   ├── .dockerignore
 │   └── package.json
-└── helm-chart/
-    ├── Chart.yaml        # Helm chart metadata
-    ├── values.yaml       # Configuration values
-    ├── .helmignore       # Helm ignore patterns
-    └── templates/
-        ├── _helpers.tpl              # Helper templates
-        ├── backend-deployment.yaml   # Backend Deployment
-        ├── backend-service.yaml      # Backend Service
-        ├── frontend-deployment.yaml  # Frontend Deployment
-        └── frontend-service.yaml     # Frontend Service
+├── helm-chart/
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   ├── .helmignore
+│   └── templates/
+│       ├── _helpers.tpl
+│       ├── backend-deployment.yaml
+│       ├── backend-service.yaml
+│       ├── frontend-deployment.yaml
+│       └── frontend-service.yaml
+└── kubernetes-manifests/
+    ├── namespace.yaml
+    ├── configmap.yaml
+    ├── backend-deployment.yaml
+    ├── backend-service.yaml
+    ├── frontend-deployment.yaml
+    └── frontend-service.yaml
 ```
 
 ## ✅ Prerequisites
 
 - **Node.js** (v14 or higher)
-- **Docker** (for containerization)
-- **Kubernetes** cluster (minikube, kind, or cloud provider)
-- **Helm** (v3 or higher)
-- **kubectl** (configured to access your cluster)
+- **Docker** & **Docker Desktop** (for image building)
+- **kubectl** (configured for your cluster)
+- **Helm** v3+ (for Helm deployments)
+- **Minikube** or **Kind** (for local deployments)
+- **kubeseal** CLI (for sealed secrets)
 
 ## 🔧 Environment Setup
 
-### Backend (.env)
+### Backend Environment Variables
 
 Create `Backend/.env`:
 
-```env
+```bash
 PORT=5000
 HOST=0.0.0.0
 ```
 
-### Frontend (.env)
+### Frontend Environment Variables
 
 Create `Frontend/.env`:
 
-```env
-# For local development
-VITE_API_BASE=http://localhost:5000
+```bash
+# For Kubernetes deployment (all environments)
+VITE_API_BASE=http://backend-service:5000
 
-# For Docker/Kubernetes
-# VITE_API_BASE=http://backend-service:5000
+# For local development only
+# VITE_API_BASE=http://localhost:5000
 ```
 
-## 🚀 Local Development
+**Note**: Frontend env variables must be set at build time for Vite/React.
 
-### Backend
+---
+
+## 🚀 Deployment Methods
+
+# 🏠 Method 1: Minikube Local Deployment
+
+## Overview
+
+Deploy the application on your local machine using Minikube. You can use either raw Kubernetes manifests or Helm charts.
+
+### Setup Minikube
 
 ```bash
-cd Backend
-npm install
-node server.js
+# Start Minikube
+minikube start --driver=docker
+
+# Verify Minikube is running
+minikube status
+
+# Point Docker to Minikube's daemon (important!)
+eval $(minikube docker-env)
 ```
-
-Backend runs on `http://localhost:5000`
-
-### Frontend
-
-```bash
-cd Frontend
-npm install
-npm run dev
-```
-
-Frontend runs on `http://localhost:3000` (or port shown in terminal)
-
-### Test Login
-
-- **Email:** `admin@example.com`
-- **Password:** `admin123`
-
-## 🐳 Docker Setup
 
 ### Build Docker Images
 
 ```bash
 # Build backend
 cd Backend
-docker build -t your-dockerhub-username/backend:latest .
+docker build -t backend:latest .
 
 # Build frontend
-cd Frontend
-docker build -t your-dockerhub-username/frontend:latest .
-```
-
-### Push to Docker Hub
-
-```bash
-docker push your-dockerhub-username/backend:latest
-docker push your-dockerhub-username/frontend:latest
-```
-
-## 📦 Local Development with Kubernetes (Without Docker Hub)
-
-### Option 1: Using Minikube's Docker Daemon (Recommended)
-
-When using Minikube, you can build images directly into Minikube's Docker daemon, avoiding the need to push to Docker Hub.
-
-```bash
-# Point your terminal to use Minikube's Docker daemon
-eval $(minikube docker-env)
-
-# Now build your images - they'll be available in Minikube
-cd Backend
-docker build -t backend:latest .
-
-cd ../Frontend  
-docker build -t frontend:latest .
-
-# Verify images are in Minikube
-docker images
-```
-
-**Update your `helm-chart/values.yaml`:**
-
-```yaml
-backend:
-  image:
-    repository: backend  # No username needed
-    tag: latest
-    pullPolicy: Never    # Important! Never pull from registry
-
-frontend:
-  image:
-    repository: frontend  # No username needed
-    tag: latest
-    pullPolicy: Never     # Important! Never pull from registry
-```
-
-### Option 2: Load Images into Kind
-
-If using Kind (Kubernetes in Docker):
-
-```bash
-# Build images normally
-cd Backend
-docker build -t backend:latest .
-
 cd ../Frontend
 docker build -t frontend:latest .
 
-# Load images into Kind cluster
-kind load docker-image backend:latest
-kind load docker-image frontend:latest
+# Verify images
+docker images | grep -E 'backend|frontend'
 ```
 
-### Option 3: Using Local Docker Registry
+## Method 1A: Using Kubernetes Manifests (kubectl)
 
-Set up a local registry for better image management:
+### Update Image Names
+
+Edit the deployment files to use local images:
 
 ```bash
-# Start local registry
-docker run -d -p 5000:5000 --name registry registry:2
+# Edit kubernetes-manifests/backend-deployment.yaml
+# Change: image: your-dockerhub-username/backend:latest
+# To:     image: backend:latest
+# And set: imagePullPolicy: Never
 
-# Tag and push images to local registry
-docker tag backend:latest localhost:5000/backend:latest
-docker tag frontend:latest localhost:5000/frontend:latest
-
-docker push localhost:5000/backend:latest
-docker push localhost:5000/frontend:latest
+# Edit kubernetes-manifests/frontend-deployment.yaml
+# Change: image: your-dockerhub-username/frontend:latest
+# To:     image: frontend:latest
+# And set: imagePullPolicy: Never
 ```
 
-**Update `values.yaml`:**
+### Deploy with kubectl
+
+```bash
+# Apply all manifests
+kubectl apply -f kubernetes-manifests/
+
+# Check deployment status
+kubectl get pods -n react-kub-app
+kubectl get services -n react-kub-app
+
+# View logs
+kubectl logs -f deployment/backend -n react-kub-app
+kubectl logs -f deployment/frontend -n react-kub-app
+```
+
+### Access the Application
+
+```bash
+# For Minikube - Open frontend service
+minikube service frontend-service -n react-kub-app
+
+# Or use port forwarding
+kubectl port-forward service/frontend-service 8080:80 -n react-kub-app
+# Access at: http://localhost:8080
+```
+
+## Method 1B: Using Helm Charts
+
+### Update Helm Values
+
+Create `helm-chart/values-minikube.yaml`:
 
 ```yaml
 backend:
   image:
-    repository: localhost:5000/backend
+    repository: backend
     tag: latest
-    pullPolicy: IfNotPresent
-
-frontend:
-  image:
-    repository: localhost:5000/frontend
-    tag: latest
-    pullPolicy: IfNotPresent
-```
-
-### Using NodePort Service Type
-
-For local development, NodePort is more practical than LoadBalancer.
-
-**Update `helm-chart/values.yaml` to use NodePort:**
-
-```yaml
-backend:
+    pullPolicy: Never
   service:
-    name: backend-service
-    type: ClusterIP        # Keep backend as ClusterIP
+    type: ClusterIP
     port: 5000
-    targetPort: 5000
+  replicaCount: 1
 
 frontend:
+  image:
+    repository: frontend
+    tag: latest
+    pullPolicy: Never
   service:
-    name: frontend-service
-    type: NodePort         # Change to NodePort for local access
+    type: NodePort
     port: 80
-    targetPort: 3000
-    nodePort: 30080        # Optional: specify port (30000-32767)
+    nodePort: 30080
+  replicaCount: 1
 ```
 
-**Access your application:**
+### Deploy with Helm
 
 ```bash
-# For Minikube
-minikube service frontend-service --url
-# Or
-minikube service frontend-service  # Opens in browser automatically
+# Install or upgrade the release
+helm upgrade --install my-app ./helm-chart \
+  -f helm-chart/values-minikube.yaml \
+  -n react-kub-app \
+  --create-namespace
 
-# For Kind - Use kubectl port-forward
-kubectl port-forward service/frontend-service 8080:80
-# Then access at http://localhost:8080
+# Check status
+helm list -n react-kub-app
+kubectl get pods -n react-kub-app
+kubectl get services -n react-kub-app
 
-# Get NodePort value
-kubectl get service frontend-service
+# View deployed values
+helm get values my-app -n react-kub-app
 ```
 
-### Complete Local Development Workflow
+### Access the Application
 
 ```bash
-# 1. Point to Minikube's Docker (if using Minikube)
-eval $(minikube docker-env)
+# Get service URL
+minikube service frontend-service -n react-kub-app --url
 
-# 2. Build images
-cd Backend && docker build -t backend:latest . && cd ..
-cd Frontend && docker build -t frontend:latest . && cd ..
-
-# 3. Update values.yaml (set pullPolicy: Never and remove dockerhub username)
-
-# 4. Install/Upgrade Helm chart
-helm upgrade --install my-app ./helm-chart
-
-# 5. Access application
-minikube service frontend-service
-
-# 6. Check logs if needed
-kubectl logs -f deployment/backend
-kubectl logs -f deployment/frontend
+# Or access via NodePort
+# http://<minikube-ip>:30080
+minikube ip
 ```
 
-### Environment Variable Configuration for Local Setup
+### Useful Helm Commands
 
-**Frontend `.env` for Kubernetes:**
+```bash
+# Rollback to previous version
+helm rollback my-app -n react-kub-app
 
-```env
-# The backend service name in Kubernetes
+# Uninstall
+helm uninstall my-app -n react-kub-app
+
+# Dry run (test without deploying)
+helm install my-app ./helm-chart -f helm-chart/values-minikube.yaml --dry-run --debug
+```
+
+### Environment Variables for Minikube
+
+**Backend/.env**:
+```bash
+PORT=5000
+HOST=0.0.0.0
+```
+
+**Frontend/.env** (build time):
+```bash
 VITE_API_BASE=http://backend-service:5000
 ```
 
-**Important Notes:**
+---
 
-1. **ImagePullPolicy:** Set to `Never` when using Minikube's daemon
-2. **Service Communication:** Frontend communicates with backend using service name `backend-service:5000`
-3. **Rebuild:** After code changes, rebuild images and upgrade Helm chart
-4. **Reset Docker Env:** Run `eval $(minikube docker-env -u)` to return to host Docker
+# 💻 Method 2: GitHub Codespaces Deployment
 
+## Overview
 
-## 💻 GitHub Codespaces Deployment
+GitHub Codespaces provides a cloud development environment with all tools pre-installed.
 
-GitHub Codespaces provides a complete development environment in the cloud, making it perfect for developing and testing Kubernetes applications without local setup.
-
-### What You Get with Codespaces:
-
-- **Pre-configured Environment:** Node.js, Docker, kubectl, and Helm pre-installed
-- **Integrated Terminal:** Full access to Linux terminal
-- **Port Forwarding:** Automatic port forwarding for web services
-- **VS Code in Browser:** Full IDE experience
-- **Free Tier:** 60 hours/month for free (for individual accounts)
-
-### Step 1: Create a Codespace
+### Create a Codespace
 
 1. Go to your repository on GitHub
-2. Click the **Code** button (green button)
+2. Click the **Code** button (green)
 3. Select the **Codespaces** tab
 4. Click **Create codespace on main**
 
-Your codespace will start with all dependencies ready!
+### Setup in Codespaces
 
-### Step 2: Create Dev Container Configuration (Optional)
+```bash
+# Start Minikube
+minikube start --driver=docker
 
-For a customized experience, create `.devcontainer/devcontainer.json`:
+# Point to Minikube's Docker daemon
+eval $(minikube docker-env)
+
+# Build images
+cd Backend && docker build -t backend:latest .
+cd ../Frontend && docker build -t frontend:latest .
+```
+
+## Method 2A: Using Kubernetes Manifests (kubectl)
+
+```bash
+# Apply all manifests
+kubectl apply -f kubernetes-manifests/
+
+# Check status
+kubectl get pods -n react-kub-app
+kubectl get services -n react-kub-app
+
+# Port forward (important for Codespaces!)
+kubectl port-forward service/frontend-service 8080:80 -n react-kub-app --address='0.0.0.0'
+```
+
+**Access**: Codespaces will auto-forward port 8080. Click on the **Ports** tab and open the forwarded URL.
+
+## Method 2B: Using Helm Charts
+
+```bash
+# Deploy with Helm
+helm upgrade --install my-app ./helm-chart \
+  -f helm-chart/values-minikube.yaml \
+  -n react-kub-app \
+  --create-namespace
+
+# Port forward
+kubectl port-forward service/frontend-service 8080:80 -n react-kub-app --address='0.0.0.0'
+```
+
+### Environment Variables for Codespaces
+
+**Backend/.env**:
+```bash
+PORT=5000
+HOST=0.0.0.0
+```
+
+**Frontend/.env** (build time):
+```bash
+VITE_API_BASE=http://backend-service:5000
+```
+
+### Dev Container Configuration (Optional)
+
+Create `.devcontainer/devcontainer.json`:
 
 ```json
 {
@@ -321,384 +338,451 @@ For a customized experience, create `.devcontainer/devcontainer.json`:
       "minikube": "latest"
     }
   },
-  "forwardPorts": [3000, 5000, 5173, 30080],
-  "portsAttributes": {
-    "3000": {
-      "label": "Frontend",
-      "onAutoForward": "notify"
-    },
-    "5000": {
-      "label": "Backend",
-      "onAutoForward": "notify"
-    }
-  },
-  "postCreateCommand": "cd Backend && npm install && cd ../Frontend && npm install",
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "ms-azuretools.vscode-docker",
-        "ms-kubernetes-tools.vscode-kubernetes-tools",
-        "esbenp.prettier-vscode"
-      ]
-    }
-  }
+  "forwardPorts": [3000, 5000, 5173, 8080, 30080],
+  "postCreateCommand": "cd Backend && npm install && cd ../Frontend && npm install"
 }
 ```
 
-### Step 3: Local Development in Codespaces
+---
 
-**Option A: Run Without Kubernetes (Quickest)**
+# 🖥️ Method 3: Production Server with NodePort
+
+## Overview
+
+Deploy to a production Kubernetes cluster (cloud or on-premise) using NodePort for external access.
+
+### Prerequisites
+
+- Kubernetes cluster (EKS, GKE, AKS, or bare-metal)
+- kubectl configured with cluster access
+- Docker images pushed to registry (Docker Hub, ECR, GCR, etc.)
+
+### Push Images to Registry
 
 ```bash
-# Terminal 1 - Backend
-cd Backend
-npm install
-node server.js
+# Tag images
+docker tag backend:latest your-dockerhub-username/backend:latest
+docker tag frontend:latest your-dockerhub-username/frontend:latest
 
-# Terminal 2 - Frontend  
-cd Frontend
-npm install
-npm run dev
+# Push to registry
+docker push your-dockerhub-username/backend:latest
+docker push your-dockerhub-username/frontend:latest
 ```
 
-Codespaces will automatically forward ports. Click the **Ports** tab to see forwarded URLs.
+## Method 3A: Using Kubernetes Manifests (kubectl)
 
-**Option B: Use Minikube in Codespaces**
+### Update Image Names
+
+Edit deployment files:
 
 ```bash
-# Start Minikube with Docker driver
-minikube start --driver=docker --container-runtime=docker
+# In backend-deployment.yaml
+image: your-dockerhub-username/backend:latest
+imagePullPolicy: IfNotPresent
 
-# Verify Minikube is running
-minikube status
+# In frontend-deployment.yaml
+image: your-dockerhub-username/frontend:latest
+imagePullPolicy: IfNotPresent
+```
 
-# Point Docker to Minikube's daemon
-eval $(minikube docker-env)
+### Update Service Type to NodePort
 
-# Build images
-cd Backend
-docker build -t backend:latest .
+Edit `kubernetes-manifests/frontend-service.yaml`:
 
-cd ../Frontend
-docker build -t frontend:latest .
+```yaml
+spec:
+  type: NodePort  # Changed from LoadBalancer
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    nodePort: 30080  # Fixed port (30000-32767)
+    name: http
+```
 
-# Create values-codespaces.yaml
-cat > ../helm-chart/values-codespaces.yaml <<EOF
+### Deploy to Server
+
+```bash
+# Apply all manifests
+kubectl apply -f kubernetes-manifests/
+
+# Check status
+kubectl get pods -n react-kub-app
+kubectl get services -n react-kub-app
+kubectl get nodes -o wide  # Get node IPs
+```
+
+### Access the Application
+
+```bash
+# Get node IP
+kubectl get nodes -o wide
+
+# Access application
+# http://<NODE_IP>:30080
+
+# Or if using cloud provider with external IPs
+kubectl get service frontend-service -n react-kub-app
+# Use EXTERNAL-IP:30080
+```
+
+## Method 3B: Using Helm Charts
+
+### Create Production Values
+
+Create `helm-chart/values-production.yaml`:
+
+```yaml
 backend:
   image:
-    repository: backend
+    repository: your-dockerhub-username/backend
     tag: latest
-    pullPolicy: Never
+    pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 5000
-    targetPort: 5000
+  replicaCount: 2  # Scale for production
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
 
 frontend:
   image:
-    repository: frontend
+    repository: your-dockerhub-username/frontend
     tag: latest
-    pullPolicy: Never
+    pullPolicy: IfNotPresent
   service:
     type: NodePort
     port: 80
-    targetPort: 5173
     nodePort: 30080
-EOF
-
-# Deploy with Helm
-helm upgrade --install my-app ../helm-chart -f ../helm-chart/values-codespaces.yaml
-
-# Port forward to access
-kubectl port-forward service/frontend-service 3000:80 --address='0.0.0.0'
+  replicaCount: 2  # Scale for production
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
 ```
 
-### Step 4: Access Your Application
-
-**For Local Development (No K8s):**
-- GitHub will show a popup for forwarded ports
-- Click on the port to open in browser
-- Or go to **Ports** tab and click the globe icon
-
-**For Minikube Deployment:**
-```bash
-# Get Minikube service URL
-minikube service frontend-service --url
-
-# Or use port forwarding (recommended for Codespaces)
-kubectl port-forward service/frontend-service 8080:80 --address='0.0.0.0'
-```
-
-Then access via the forwarded port in the Ports tab.
-
-### Step 5: Development Workflow
+### Deploy with Helm
 
 ```bash
-# Make code changes
-
-# Rebuild images
-eval $(minikube docker-env)
-cd Backend && docker build -t backend:latest .
-cd Frontend && docker build -t frontend:latest .
-
-# Restart pods
-kubectl rollout restart deployment/backend
-kubectl rollout restart deployment/frontend
-
-# Check status
-kubectl get pods
-kubectl logs -f deployment/backend
-kubectl logs -f deployment/frontend
-```
-
-### Advantages of Codespaces:
-
-✅ **No Local Setup:** Everything runs in the cloud  
-✅ **Consistent Environment:** Same setup for all developers  
-✅ **Resource Efficient:** Uses GitHub's infrastructure  
-✅ **Quick Start:** Ready in ~2 minutes  
-✅ **Shareable:** Share your codespace URL with team  
-✅ **Free Tier:** 60 hours/month free for individuals  
-
-### Troubleshooting in Codespaces:
-
-**Port Not Accessible:**
-```bash
-# Make sure to use --address='0.0.0.0' for port forwarding
-kubectl port-forward service/frontend-service 8080:80 --address='0.0.0.0'
-```
-
-**Minikube Won't Start:**
-```bash
-# Clean up and restart
-minikube delete
-minikube start --driver=docker
-```
-
-**Docker Out of Space:**
-```bash
-# Clean up Docker
-docker system prune -a
-```
-
-### Cost Management:
-
-- **Free Tier:** 60 hours/month (2-core, 4GB RAM)
-- **Stop Codespace:** Stops after 30 minutes of inactivity
-- **Manual Stop:** Click "Stop Codespace" when done
-- **Delete Codespace:** Delete when no longer needed
-
-### Complete Codespaces Setup Script:
-
-Create a file `setup-codespace.sh`:
-
-```bash
-#!/bin/bash
-echo "Setting up Codespace for React-Kubernetes App..."
-
-# Install dependencies
-cd Backend && npm install && cd ..
-cd Frontend && npm install && cd ..
-
-# Start Minikube
-minikube start --driver=docker
-
-# Build images
-eval $(minikube docker-env)
-docker build -t backend:latest ./Backend
-docker build -t frontend:latest ./Frontend
-
-# Deploy
+# Install or upgrade
 helm upgrade --install my-app ./helm-chart \
-  --set backend.image.repository=backend \
-  --set backend.image.pullPolicy=Never \
-  --set frontend.image.repository=frontend \
-  --set frontend.image.pullPolicy=Never \
-  --set frontend.service.type=NodePort
+  -f helm-chart/values-production.yaml \
+  -n react-kub-app \
+  --create-namespace
 
-echo "Setup complete! Use 'kubectl get pods' to check status."
-echo "Forward ports with: kubectl port-forward service/frontend-service 8080:80 --address='0.0.0.0'"
+# Verify deployment
+helm list -n react-kub-app
+kubectl get all -n react-kub-app
+
+# View release history
+helm history my-app -n react-kub-app
 ```
 
-Make it executable and run:
+### Environment Variables for Production
+
+**Backend/.env** (or use ConfigMap/Secrets):
 ```bash
-chmod +x setup-codespace.sh
-./setup-codespace.sh
+PORT=5000
+HOST=0.0.0.0
 ```
 
+**Frontend/.env** (build time):
+```bash
+VITE_API_BASE=http://backend-service:5000
+```
 
+### Scaling in Production
 
+```bash
+# Scale with kubectl
+kubectl scale deployment backend --replicas=3 -n react-kub-app
+kubectl scale deployment frontend --replicas=3 -n react-kub-app
 
-## ☸️ Kubernetes Deployment with Helm
+# Or update Helm values and upgrade
+helm upgrade my-app ./helm-chart -f helm-chart/values-production.yaml -n react-kub-app
+```
 
-### Step 1: Update Helm Values
+---
 
-Edit `helm-chart/values.yaml` and update the Docker image repositories:
+# 🔐 Secrets Management
+
+## Using Bitnami Sealed Secrets
+
+Sealed Secrets allow you to encrypt secrets locally and store them safely in Git. They can only be decrypted by the controller running in your cluster.
+
+### Install Sealed Secrets Controller (On Server)
+
+```bash
+# Install the controller on your Kubernetes cluster
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
+
+# Verify installation
+kubectl get pods -n kube-system | grep sealed-secrets
+```
+
+### Install kubeseal CLI (Locally)
+
+```bash
+# Linux
+wget https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/kubeseal-0.24.0-linux-amd64.tar.gz
+tar -xvzf kubeseal-0.24.0-linux-amd64.tar.gz
+sudo install -m 755 kubeseal /usr/local/bin/kubeseal
+
+# macOS
+brew install kubeseal
+
+# Windows
+choco install kubeseal
+
+# Verify
+kubeseal --version
+```
+
+### Create Secrets Locally
+
+```bash
+# Create a regular Kubernetes secret (locally, don't apply yet!)
+kubectl create secret generic app-secrets \
+  --from-literal=db-password=mySecurePassword123 \
+  --from-literal=api-key=myApiKey456 \
+  --from-literal=jwt-secret=myJwtSecret789 \
+  --namespace=react-kub-app \
+  --dry-run=client -o yaml > secret.yaml
+```
+
+### Fetch Server's Public Key (Optional)
+
+```bash
+# Fetch the public key from your cluster
+kubeseal --fetch-cert --controller-name=sealed-secrets-controller --controller-namespace=kube-system > pub-cert.pem
+```
+
+### Seal the Secret (YES - Create Locally, Use on Server!)
+
+```bash
+# Seal the secret using the server's public key
+kubeseal --format=yaml --cert=pub-cert.pem < secret.yaml > sealed-secret.yaml
+
+# Or seal without fetching cert (uses cluster's cert automatically)
+kubeseal --format=yaml < secret.yaml > sealed-secret.yaml
+```
+
+### Deploy Sealed Secret to Server
+
+```bash
+# Apply the sealed secret to your cluster
+kubectl apply -f sealed-secret.yaml -n react-kub-app
+
+# Verify - the sealed-secrets controller will decrypt it
+kubectl get secrets -n react-kub-app
+kubectl get sealedsecrets -n react-kub-app
+```
+
+### Using Secrets in Deployments
+
+Update your deployment to use the secret:
 
 ```yaml
-backend:
-  image:
-    repository: your-dockerhub-username/backend  # Update this
-    tag: latest
-
-frontend:
-  image:
-    repository: your-dockerhub-username/frontend  # Update this
-    tag: latest
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: db-password
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: api-key
 ```
 
-### Step 2: Install the Helm Chart
+### Key Points
 
-```bash
-# Install the chart
-helm install my-app ./helm-chart
+✅ **YES**: You can create sealed secrets locally  
+✅ **YES**: You can store sealed secrets in Git safely  
+✅ **YES**: Only the server can decrypt them  
+✅ **YES**: The sealed-secrets controller decrypts automatically  
+❌ **NO**: Regular secrets should never be in Git  
 
-# Check deployment status
-kubectl get pods
-kubectl get services
-```
+### Workflow Summary
 
-### Step 3: Access the Application
+1. Create secret locally (`kubectl create secret ... --dry-run`)
+2. Seal it with kubeseal (`kubeseal < secret.yaml > sealed-secret.yaml`)
+3. Commit `sealed-secret.yaml` to Git (safe!)
+4. Apply to cluster (`kubectl apply -f sealed-secret.yaml`)
+5. Controller decrypts and creates actual secret
+6. Pods use the decrypted secret
 
-```bash
-# Get the frontend service external IP (for LoadBalancer)
-kubectl get service frontend-service
-
-# For minikube
-minikube service frontend-service
-
-# Port forward (alternative method)
-kubectl port-forward service/frontend-service 8080:80
-```
-
-Access the application at `http://localhost:8080` (if using port-forward)
-
-### Helm Commands
-
-```bash
-# List installed releases
-helm list
-
-# Upgrade the deployment
-helm upgrade my-app ./helm-chart
-
-# Rollback to previous version
-helm rollback my-app
-
-# Uninstall the deployment
-helm uninstall my-app
-
-# View values
-helm get values my-app
-```
-
-## ⚙️ Configuration
-
-### Helm Chart Values
-
-Key configurations in `helm-chart/values.yaml`:
-
-| Parameter | Description | Default |
-|-----------|-------------|----------|
-| `backend.replicaCount` | Number of backend replicas | `1` |
-| `backend.image.repository` | Backend Docker image | `your-dockerhub-username/backend` |
-| `backend.service.port` | Backend service port | `5000` |
-| `frontend.replicaCount` | Number of frontend replicas | `1` |
-| `frontend.image.repository` | Frontend Docker image | `your-dockerhub-username/frontend` |
-| `frontend.service.type` | Frontend service type | `LoadBalancer` |
-| `frontend.service.port` | Frontend service port | `80` |
-
-### Resource Limits
-
-Default resource limits (can be modified in `values.yaml`):
-
-```yaml
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
-```
-
-## 📖 Usage
-
-### Development Workflow
-
-1. Make changes to your code
-2. Build new Docker images
-3. Push to Docker Hub
-4. Update Helm chart (if needed)
-5. Upgrade deployment:
-   ```bash
-   helm upgrade my-app ./helm-chart
-   ```
-
-### Scaling
-
-```bash
-# Scale backend
-kubectl scale deployment backend --replicas=3
-
-# Scale frontend
-kubectl scale deployment frontend --replicas=3
-
-# Or update values.yaml and upgrade
-helm upgrade my-app ./helm-chart
-```
-
-### Monitoring
-
-```bash
-# View logs
-kubectl logs -f deployment/backend
-kubectl logs -f deployment/frontend
-
-# Describe pods
-kubectl describe pod <pod-name>
-
-# Check events
-kubectl get events --sort-by=.metadata.creationTimestamp
-```
+---
 
 ## 🔍 Troubleshooting
 
-### Common Issues
+### Pods Not Starting
 
-1. **Pods not starting:**
-   ```bash
-   kubectl describe pod <pod-name>
-   kubectl logs <pod-name>
-   ```
+```bash
+# Check pod status
+kubectl get pods -n react-kub-app
 
-2. **Image pull errors:**
-   - Verify Docker image names in `values.yaml`
-   - Check Docker Hub credentials
-   - Ensure images are pushed to registry
+# Describe pod for events
+kubectl describe pod <pod-name> -n react-kub-app
 
-3. **Service not accessible:**
-   ```bash
-   kubectl get services
-   kubectl describe service frontend-service
-   ```
+# Check logs
+kubectl logs <pod-name> -n react-kub-app
+kubectl logs <pod-name> -n react-kub-app --previous  # For crashed pods
+```
 
-4. **Backend connection issues:**
-   - Check `VITE_API_BASE` environment variable
-   - Verify backend service name: `backend-service`
-   - Check backend logs: `kubectl logs -f deployment/backend`
+### Image Pull Errors
+
+```bash
+# For local images (Minikube/Codespaces)
+# Ensure: imagePullPolicy: Never
+# And: eval $(minikube docker-env)
+
+# For registry images
+# Check image name is correct
+# Verify image exists: docker pull your-dockerhub-username/backend:latest
+```
+
+### Service Not Accessible
+
+```bash
+# Check services
+kubectl get services -n react-kub-app
+
+# Check endpoints
+kubectl get endpoints -n react-kub-app
+
+# Port forward to test
+kubectl port-forward service/frontend-service 8080:80 -n react-kub-app
+```
+
+### Backend Connection Issues
+
+```bash
+# Verify backend service
+kubectl get service backend-service -n react-kub-app
+
+# Test from frontend pod
+kubectl exec -it <frontend-pod> -n react-kub-app -- wget -O- http://backend-service:5000
+
+# Check backend logs
+kubectl logs deployment/backend -n react-kub-app --tail=100
+```
+
+### Helm Issues
+
+```bash
+# Check Helm release
+helm list -n react-kub-app
+
+# Get release details
+helm get all my-app -n react-kub-app
+
+# Rollback if needed
+helm rollback my-app -n react-kub-app
+```
+
+---
 
 ## 📝 API Endpoints
 
 ### Backend API
 
-- **POST** `/api/login` - User login
-  ```json
-  {
-    "email": "admin@example.com",
-    "password": "admin123"
-  }
-  ```
+**POST** `/api/login` - User login
+
+Request:
+```json
+{
+  "email": "admin@example.com",
+  "password": "admin123"
+}
+```
+
+Response:
+```json
+{
+  "message": "Login successful",
+  "user": "admin@example.com"
+}
+```
+
+### Test Credentials
+
+- **Email**: `admin@example.com`
+- **Password**: `admin123`
+
+---
+
+## 🔄 Comparison: kubectl vs Helm
+
+| Feature | kubectl (Manifests) | Helm Charts |
+|---------|-------------------|-------------|
+| **Complexity** | Simple, direct | More setup initially |
+| **Reusability** | Low | High - templating |
+| **Configuration** | Edit YAML files | values.yaml files |
+| **Versioning** | Manual | Built-in |
+| **Rollback** | Manual | Easy (`helm rollback`) |
+| **Best For** | Simple apps, learning | Production, complex apps |
+
+---
+
+## 🎯 Quick Reference
+
+### Minikube Commands
+
+```bash
+minikube start
+minikube stop
+minikube delete
+minikube ip
+minikube service <service-name> -n <namespace>
+eval $(minikube docker-env)          # Point to Minikube Docker
+eval $(minikube docker-env -u)       # Reset to host Docker
+```
+
+### kubectl Commands
+
+```bash
+kubectl get pods -n react-kub-app
+kubectl get services -n react-kub-app
+kubectl get all -n react-kub-app
+kubectl describe pod <pod-name> -n react-kub-app
+kubectl logs -f <pod-name> -n react-kub-app
+kubectl exec -it <pod-name> -n react-kub-app -- /bin/sh
+kubectl delete -f kubernetes-manifests/
+kubectl apply -f kubernetes-manifests/
+```
+
+### Helm Commands
+
+```bash
+helm install <release-name> <chart-path>
+helm upgrade <release-name> <chart-path>
+helm upgrade --install <release-name> <chart-path>
+helm list -n <namespace>
+helm uninstall <release-name> -n <namespace>
+helm rollback <release-name> -n <namespace>
+helm history <release-name> -n <namespace>
+```
+
+---
 
 ## 🤝 Contributing
 
@@ -708,7 +792,7 @@ kubectl get events --sort-by=.metadata.creationTimestamp
 4. Push to the branch
 5. Create a Pull Request
 
-## 📄 License
+## 📜 License
 
 This project is open source and available under the MIT License.
 
@@ -716,9 +800,15 @@ This project is open source and available under the MIT License.
 
 **Satishpanga**
 
-## 🙏 Acknowledgments
+## 🚀 Next Steps
 
-- React Team
-- Express.js
-- Kubernetes
-- Helm
+- Add monitoring with Prometheus + Grafana
+- Implement CI/CD with GitHub Actions
+- Add Ingress for domain-based routing
+- Configure horizontal pod autoscaling
+- Set up persistent volumes for databases
+- Implement logging with EFK stack
+
+---
+
+**Made with ❤️ for Kubernetes learners**
