@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: react-kub-app
+  labels:
+    name: react-kub-app
+    environment: development
