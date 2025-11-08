@@ -10,6 +10,7 @@ A full-stack application with React frontend and Node.js Express backend, deploy
 - [Local Development](#local-development)
 - [Docker Setup](#docker-setup)
 - - [Local Development with Kubernetes](#local-development-with-kubernetes-without-docker-hub)
+  - - [GitHub Codespaces Deployment](#github-codespaces-deployment)
 - [Kubernetes Deployment with Helm](#kubernetes-deployment-with-helm)
 - [Configuration](#configuration)
 - [Usage](#usage)
@@ -281,6 +282,250 @@ VITE_API_BASE=http://backend-service:5000
 2. **Service Communication:** Frontend communicates with backend using service name `backend-service:5000`
 3. **Rebuild:** After code changes, rebuild images and upgrade Helm chart
 4. **Reset Docker Env:** Run `eval $(minikube docker-env -u)` to return to host Docker
+
+
+## 💻 GitHub Codespaces Deployment
+
+GitHub Codespaces provides a complete development environment in the cloud, making it perfect for developing and testing Kubernetes applications without local setup.
+
+### What You Get with Codespaces:
+
+- **Pre-configured Environment:** Node.js, Docker, kubectl, and Helm pre-installed
+- **Integrated Terminal:** Full access to Linux terminal
+- **Port Forwarding:** Automatic port forwarding for web services
+- **VS Code in Browser:** Full IDE experience
+- **Free Tier:** 60 hours/month for free (for individual accounts)
+
+### Step 1: Create a Codespace
+
+1. Go to your repository on GitHub
+2. Click the **Code** button (green button)
+3. Select the **Codespaces** tab
+4. Click **Create codespace on main**
+
+Your codespace will start with all dependencies ready!
+
+### Step 2: Create Dev Container Configuration (Optional)
+
+For a customized experience, create `.devcontainer/devcontainer.json`:
+
+```json
+{
+  "name": "React-Kubernetes-App",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:18",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "version": "latest",
+      "helm": "latest",
+      "minikube": "latest"
+    }
+  },
+  "forwardPorts": [3000, 5000, 5173, 30080],
+  "portsAttributes": {
+    "3000": {
+      "label": "Frontend",
+      "onAutoForward": "notify"
+    },
+    "5000": {
+      "label": "Backend",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "cd Backend && npm install && cd ../Frontend && npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}
+```
+
+### Step 3: Local Development in Codespaces
+
+**Option A: Run Without Kubernetes (Quickest)**
+
+```bash
+# Terminal 1 - Backend
+cd Backend
+npm install
+node server.js
+
+# Terminal 2 - Frontend  
+cd Frontend
+npm install
+npm run dev
+```
+
+Codespaces will automatically forward ports. Click the **Ports** tab to see forwarded URLs.
+
+**Option B: Use Minikube in Codespaces**
+
+```bash
+# Start Minikube with Docker driver
+minikube start --driver=docker --container-runtime=docker
+
+# Verify Minikube is running
+minikube status
+
+# Point Docker to Minikube's daemon
+eval $(minikube docker-env)
+
+# Build images
+cd Backend
+docker build -t backend:latest .
+
+cd ../Frontend
+docker build -t frontend:latest .
+
+# Create values-codespaces.yaml
+cat > ../helm-chart/values-codespaces.yaml <<EOF
+backend:
+  image:
+    repository: backend
+    tag: latest
+    pullPolicy: Never
+  service:
+    type: ClusterIP
+    port: 5000
+    targetPort: 5000
+
+frontend:
+  image:
+    repository: frontend
+    tag: latest
+    pullPolicy: Never
+  service:
+    type: NodePort
+    port: 80
+    targetPort: 5173
+    nodePort: 30080
+EOF
+
+# Deploy with Helm
+helm upgrade --install my-app ../helm-chart -f ../helm-chart/values-codespaces.yaml
+
+# Port forward to access
+kubectl port-forward service/frontend-service 3000:80 --address='0.0.0.0'
+```
+
+### Step 4: Access Your Application
+
+**For Local Development (No K8s):**
+- GitHub will show a popup for forwarded ports
+- Click on the port to open in browser
+- Or go to **Ports** tab and click the globe icon
+
+**For Minikube Deployment:**
+```bash
+# Get Minikube service URL
+minikube service frontend-service --url
+
+# Or use port forwarding (recommended for Codespaces)
+kubectl port-forward service/frontend-service 8080:80 --address='0.0.0.0'
+```
+
+Then access via the forwarded port in the Ports tab.
+
+### Step 5: Development Workflow
+
+```bash
+# Make code changes
+
+# Rebuild images
+eval $(minikube docker-env)
+cd Backend && docker build -t backend:latest .
+cd Frontend && docker build -t frontend:latest .
+
+# Restart pods
+kubectl rollout restart deployment/backend
+kubectl rollout restart deployment/frontend
+
+# Check status
+kubectl get pods
+kubectl logs -f deployment/backend
+kubectl logs -f deployment/frontend
+```
+
+### Advantages of Codespaces:
+
+✅ **No Local Setup:** Everything runs in the cloud  
+✅ **Consistent Environment:** Same setup for all developers  
+✅ **Resource Efficient:** Uses GitHub's infrastructure  
+✅ **Quick Start:** Ready in ~2 minutes  
+✅ **Shareable:** Share your codespace URL with team  
+✅ **Free Tier:** 60 hours/month free for individuals  
+
+### Troubleshooting in Codespaces:
+
+**Port Not Accessible:**
+```bash
+# Make sure to use --address='0.0.0.0' for port forwarding
+kubectl port-forward service/frontend-service 8080:80 --address='0.0.0.0'
+```
+
+**Minikube Won't Start:**
+```bash
+# Clean up and restart
+minikube delete
+minikube start --driver=docker
+```
+
+**Docker Out of Space:**
+```bash
+# Clean up Docker
+docker system prune -a
+```
+
+### Cost Management:
+
+- **Free Tier:** 60 hours/month (2-core, 4GB RAM)
+- **Stop Codespace:** Stops after 30 minutes of inactivity
+- **Manual Stop:** Click "Stop Codespace" when done
+- **Delete Codespace:** Delete when no longer needed
+
+### Complete Codespaces Setup Script:
+
+Create a file `setup-codespace.sh`:
+
+```bash
+#!/bin/bash
+echo "Setting up Codespace for React-Kubernetes App..."
+
+# Install dependencies
+cd Backend && npm install && cd ..
+cd Frontend && npm install && cd ..
+
+# Start Minikube
+minikube start --driver=docker
+
+# Build images
+eval $(minikube docker-env)
+docker build -t backend:latest ./Backend
+docker build -t frontend:latest ./Frontend
+
+# Deploy
+helm upgrade --install my-app ./helm-chart \
+  --set backend.image.repository=backend \
+  --set backend.image.pullPolicy=Never \
+  --set frontend.image.repository=frontend \
+  --set frontend.image.pullPolicy=Never \
+  --set frontend.service.type=NodePort
+
+echo "Setup complete! Use 'kubectl get pods' to check status."
+echo "Forward ports with: kubectl port-forward service/frontend-service 8080:80 --address='0.0.0.0'"
+```
+
+Make it executable and run:
+```bash
+chmod +x setup-codespace.sh
+./setup-codespace.sh
+```
+
 
 
 
