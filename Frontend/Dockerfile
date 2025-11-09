@@ -1,29 +1,24 @@
-# 1️⃣ Use Node base image
+# Use Node 20 on Alpine
 FROM node:20-alpine
 
-# 2️⃣ Set working directory
+# Workdir
 WORKDIR /app
 
-# 3️⃣ Copy package files first
+# Copy only manifest files first for better caching
 COPY package*.json ./
 
-# 4️⃣ Install dependencies
-RUN npm install
+# Prefer reproducible install, but fall back to a fresh install if the
+# lockfile was generated on another OS/ABI and misses platform-specific
+# optional deps like @rollup/rollup-linux-x64-musl.
+# See npm optional-deps lockfile bug threads.
+RUN npm ci || (rm -f package-lock.json && npm install)
 
-# 5️⃣ Copy rest of the code
+# Copy the rest of the source
 COPY . .
 
-# 6️⃣ Expose Vite's default dev server port
+# Document Vite dev port
 EXPOSE 5173
 
-# 6️⃣ Start app
-CMD ["npm", "run", "dev", "--", "--host"]
+# Bind to all interfaces on a fixed port and fail fast if taken
+CMD ["npm","run","dev","--","--host","0.0.0.0","--port","5173","--strictPort"]
 
-# 7️⃣ Start the Vite development server
-#CMD ["npm", "run", "dev"]
-
-# 6️⃣ Expose frontend port (React default port is 3000)
-#EXPOSE 5173
-
-#to start the server
-#CMD ["npm", "start"]

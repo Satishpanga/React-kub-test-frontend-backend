@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: ./Backend
+    env_file:
+      - ./Backend/.env
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./Backend:/app
+      - /app/node_modules
+    # If your Backend image already defines CMD, you can omit 'command'.
+    # command: ["node","server.js"]
+
+  frontend:
+    build: ./frontend
+    environment:
+      - VITE_API_BASE=http://localhost:5000
+    ports:
+      - "5173:5173"
+    command: ["npm","run","dev","--","--host","0.0.0.0","--port","5173","--strictPort"]
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
