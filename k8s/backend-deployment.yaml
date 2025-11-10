@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: react-kub-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: pangasathish/react-test:backend
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: BACKEND_PORT
+            - name: HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: BACKEND_HOST
