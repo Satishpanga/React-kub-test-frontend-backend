@@ -4,12 +4,13 @@ metadata:
   name: frontend
   namespace: react-kub-app
 spec:
-  type: NodePort
+  type: LoadBalancer 
+  # type: NodePort
   selector:
     app: frontend
     tier: frontend
   ports:
     - protocol: TCP
-      port: 5173
-      targetPort: 5173
-      nodePort: 30573  # (or any available NodePort value between 30000-32767)
+      port: 80
+      targetPort: 80
+      nodePort: 30573

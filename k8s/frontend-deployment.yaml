@@ -1,3 +1,34 @@
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: frontend
+#   namespace: react-kub-app
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: frontend
+#       tier: frontend
+#   template:
+#     metadata:
+#       labels:
+#         app: frontend
+#         tier: frontend
+#     spec:
+#       containers:
+#         - name: frontend
+#           image: pangasathish/react-test:frontend
+#           imagePullPolicy: IfNotPresent
+#           ports:
+#             - containerPort: 80
+#           env:
+#             - name: VITE_API_BASE
+#               valueFrom:
+#                 configMapKeyRef:
+#                   name: app-config
+#                   key: VITE_API_BASE
+
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,7 +51,7 @@ spec:
           image: pangasathish/react-test:frontend
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 5173
+            - containerPort: 80
           env:
             - name: VITE_API_BASE
               valueFrom:
